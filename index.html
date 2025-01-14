@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NFC Scanner</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            margin: 10px 0;
+            width: 100%;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button.stop {
+            background: #f44336;
+        }
+        button.stop:hover {
+            background: #da190b;
+        }
+        #log {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-top: 20px;
+            height: 300px;
+            overflow-y: auto;
+            background: white;
+            border-radius: 4px;
+        }
+        .scan-item {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+        }
+        .scan-item:nth-child(odd) {
+            background: #f9f9f9;
+        }
+        .status {
+            text-align: center;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .status.active {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        .status.inactive {
+            background: #ffebee;
+            color: #c62828;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NFC Scanner</h1>
+        <div class="input-group">
+            <label for="device-id">Device ID:</label>
+            <input type="text" id="device-id" placeholder="Enter device ID" required>
+        </div>
+        <button onclick="startScanning()">Start Scanning</button>
+        <button onclick="stopScanning()" class="stop">Stop Scanning</button>
+        <div id="status" class="status inactive">Scanner inactive</div>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        let isScanning = false;
+        const log = document.getElementById('log');
+        const status = document.getElementById('status');
+        // Замените на URL вашего Google Apps Script
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw0V-V0l1knqzS68Tga2GnYEIuJ4vN7RfrGXeneelhaULOk78Q-uVnsVj-J-j4goZN0/exec';
+        
+        async function startScanning() {
+            if (!('NDEFReader' in window)) {
+                alert('WebNFC не поддерживается в этом браузере. Пожалуйста, используйте Chrome на Android.');
+                return;
+            }
+
+            const deviceId = document.getElementById('device-id').value;
+            if (!deviceId) {
+                alert('Пожалуйста, введите ID устройства');
+                return;
+            }
+
+            try {
+                isScanning = true;
+                status.className = 'status active';
+                status.textContent = 'Scanner active - ready to scan';
+                
+                const ndef = new NDEFReader();
+                await ndef.scan();
+                
+                addLogEntry('Сканирование начато...', 'system');
+                
+                ndef.addEventListener("reading", ({ serialNumber }) => {
+                    if (!isScanning) return;
+                    
+                    const timestamp = new Date().toISOString();
+                    const logEntry = `${new Date().toLocaleTimeString()} - Device: ${deviceId} - NFC: ${serialNumber}`;
+                    
+                    addLogEntry(logEntry, 'scan');
+                    
+                    sendToServer({
+                        timestamp: timestamp,
+                        deviceId: deviceId,
+                        nfcId: serialNumber
+                    });
+                });
+                
+            } catch (error) {
+                alert(`Ошибка: ${error}`);
+                status.className = 'status inactive';
+                status.textContent = 'Scanner error';
+            }
+        }
+        
+        function stopScanning() {
+            isScanning = false;
+            status.className = 'status inactive';
+            status.textContent = 'Scanner inactive';
+            addLogEntry('Сканирование остановлено', 'system');
+        }
+        
+        function addLogEntry(message, type) {
+            const div = document.createElement('div');
+            div.className = 'scan-item';
+            div.textContent = message;
+            log.insertBefore(div, log.firstChild);
+        }
+        
+        async function sendToServer(data) {
+            try {
+                const response = await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'text/plain',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                addLogEntry(`Ошибка отправки: ${error.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html>
