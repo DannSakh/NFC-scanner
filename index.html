@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <title>NFC Scanner</title>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body {
@@ -100,33 +101,35 @@
     </div>
 
     <script>
+        // Configuration
+        const config = {
+            apiUrl: 'YOUR_GOOGLE_SCRIPT_URL' // Replace with your actual URL
+        };
+
         let isScanning = false;
         const log = document.getElementById('log');
         const status = document.getElementById('status');
-        // Замените на URL вашего Google Apps Script
-        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw0V-V0l1knqzS68Tga2GnYEIuJ4vN7RfrGXeneelhaULOk78Q-uVnsVj-J-j4goZN0/exec';
         
         async function startScanning() {
             if (!('NDEFReader' in window)) {
-                alert('WebNFC не поддерживается в этом браузере. Пожалуйста, используйте Chrome на Android.');
+                alert('WebNFC is not supported in this browser. Please use Chrome on Android.');
                 return;
             }
 
             const deviceId = document.getElementById('device-id').value;
             if (!deviceId) {
-                alert('Пожалуйста, введите ID устройства');
+                alert('Please enter a device ID');
                 return;
             }
 
             try {
                 isScanning = true;
-                status.className = 'status active';
-                status.textContent = 'Scanner active - ready to scan';
+                updateStatus(true);
                 
                 const ndef = new NDEFReader();
                 await ndef.scan();
                 
-                addLogEntry('Сканирование начато...', 'system');
+                addLogEntry('Scanning started...', 'system');
                 
                 ndef.addEventListener("reading", ({ serialNumber }) => {
                     if (!isScanning) return;
@@ -144,17 +147,19 @@
                 });
                 
             } catch (error) {
-                alert(`Ошибка: ${error}`);
-                status.className = 'status inactive';
-                status.textContent = 'Scanner error';
+                handleError(error);
             }
         }
         
         function stopScanning() {
             isScanning = false;
-            status.className = 'status inactive';
-            status.textContent = 'Scanner inactive';
-            addLogEntry('Сканирование остановлено', 'system');
+            updateStatus(false);
+            addLogEntry('Scanning stopped', 'system');
+        }
+        
+        function updateStatus(isActive) {
+            status.className = `status ${isActive ? 'active' : 'inactive'}`;
+            status.textContent = `Scanner ${isActive ? 'active - ready to scan' : 'inactive'}`;
         }
         
         function addLogEntry(message, type) {
@@ -164,12 +169,20 @@
             log.insertBefore(div, log.firstChild);
         }
         
+        function handleError(error) {
+            console.error('Error:', error);
+            alert(`Error: ${error.message}`);
+            updateStatus(false);
+            addLogEntry(`Error: ${error.message}`, 'error');
+        }
+        
         async function sendToServer(data) {
             try {
-                const response = await fetch(GOOGLE_SCRIPT_URL, {
+                const response = await fetch(config.apiUrl, {
                     method: 'POST',
+                    mode: 'cors',
                     headers: {
-                        'Content-Type': 'text/plain',
+                        'Content-Type': 'application/json',
                     },
                     body: JSON.stringify(data)
                 });
@@ -178,8 +191,7 @@
                     throw new Error('Network response was not ok');
                 }
             } catch (error) {
-                console.error('Error:', error);
-                addLogEntry(`Ошибка отправки: ${error.message}`, 'error');
+                handleError(error);
             }
         }
     </script>
