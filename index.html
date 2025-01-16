@@ -43,10 +43,13 @@
             margin: 10px 0;
             width: 100%;
             cursor: pointer;
-            transition: background 0.3s;
         }
         button:hover {
             background: #45a049;
+        }
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
         }
         button.stop {
             background: #f44336;
@@ -68,9 +71,6 @@
             border-bottom: 1px solid #eee;
             font-size: 14px;
         }
-        .scan-item:nth-child(odd) {
-            background: #f9f9f9;
-        }
         .status {
             text-align: center;
             padding: 10px;
@@ -91,40 +91,47 @@
     <div class="container">
         <h1>NFC Scanner</h1>
         <div class="input-group">
-            <label for="device-id">Device ID:</label>
-            <input type="text" id="device-id" placeholder="Enter device ID" required>
+            <label for="trainer-name">Trainer Name:</label>
+            <input type="text" id="trainer-name" placeholder="Enter your name" required>
         </div>
-        <button onclick="startScanning()">Start Scanning</button>
-        <button onclick="stopScanning()" class="stop">Stop Scanning</button>
+        <div class="input-group">
+            <label for="training-id">Training ID:</label>
+            <input type="text" id="training-id" placeholder="Enter training ID" required>
+        </div>
+        <button id="startButton" onclick="startScanning()">Start Scanning</button>
+        <button id="stopButton" onclick="stopScanning()" class="stop" disabled>Stop Scanning</button>
         <div id="status" class="status inactive">Scanner inactive</div>
         <div id="log"></div>
     </div>
 
     <script>
-        // Configuration
-        const config = {
-            apiUrl: 'https://script.google.com/macros/s/AKfycbwEKmozRuf8pTC4vDWL_n2Ot92mU3OjZOWUTe5c2OakGEO9IB6X24gw7_fBDl9TUYKc/exec' // Replace with your actual URL
-        };
-
+        // Replace this URL with your Google Apps Script Web App URL
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzQCiKfuA_Tupj76-ZNFdA_42DwcOVSmwxAJVxsAEd_roFrmkrnIPyB8H3o8nAjBUTP/exec';
+        
         let isScanning = false;
         const log = document.getElementById('log');
         const status = document.getElementById('status');
-        
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+
         async function startScanning() {
             if (!('NDEFReader' in window)) {
                 alert('WebNFC is not supported in this browser. Please use Chrome on Android.');
                 return;
             }
 
-            const deviceId = document.getElementById('device-id').value;
-            if (!deviceId) {
-                alert('Please enter a device ID');
+            const trainerName = document.getElementById('trainer-name').value;
+            const trainingId = document.getElementById('training-id').value;
+            
+            if (!trainerName || !trainingId) {
+                alert('Please enter both Trainer Name and Training ID');
                 return;
             }
 
             try {
                 isScanning = true;
                 updateStatus(true);
+                updateButtons(true);
                 
                 const ndef = new NDEFReader();
                 await ndef.scan();
@@ -135,13 +142,14 @@
                     if (!isScanning) return;
                     
                     const timestamp = new Date().toISOString();
-                    const logEntry = `${new Date().toLocaleTimeString()} - Device: ${deviceId} - NFC: ${serialNumber}`;
+                    const logEntry = `${new Date().toLocaleTimeString()} - Trainer: ${trainerName} - Training: ${trainingId} - NFC: ${serialNumber}`;
                     
-                    addLogEntry(logEntry, 'scan');
+                    addLogEntry(logEntry);
                     
                     sendToServer({
                         timestamp: timestamp,
-                        deviceId: deviceId,
+                        trainerName: trainerName,
+                        trainingId: trainingId,
                         nfcId: serialNumber
                     });
                 });
@@ -154,15 +162,21 @@
         function stopScanning() {
             isScanning = false;
             updateStatus(false);
-            addLogEntry('Scanning stopped', 'system');
+            updateButtons(false);
+            addLogEntry('Scanning stopped');
         }
         
         function updateStatus(isActive) {
             status.className = `status ${isActive ? 'active' : 'inactive'}`;
             status.textContent = `Scanner ${isActive ? 'active - ready to scan' : 'inactive'}`;
         }
+
+        function updateButtons(isScanning) {
+            startButton.disabled = isScanning;
+            stopButton.disabled = !isScanning;
+        }
         
-        function addLogEntry(message, type) {
+        function addLogEntry(message) {
             const div = document.createElement('div');
             div.className = 'scan-item';
             div.textContent = message;
@@ -173,23 +187,22 @@
             console.error('Error:', error);
             alert(`Error: ${error.message}`);
             updateStatus(false);
-            addLogEntry(`Error: ${error.message}`, 'error');
+            updateButtons(false);
+            isScanning = false;
         }
         
         async function sendToServer(data) {
             try {
-                const response = await fetch(config.apiUrl, {
+                const response = await fetch(GOOGLE_SCRIPT_URL, {
                     method: 'POST',
-                    mode: 'cors',
+                    mode: 'no-cors', // This is important for Google Apps Script
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify(data)
                 });
                 
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
+                addLogEntry('Data sent successfully');
             } catch (error) {
                 handleError(error);
             }
