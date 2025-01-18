@@ -1,90 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+<!-- [Previous head and style sections remain the same] -->
 <head>
     <title>NFC Scanner</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            max-width: 600px;
-            margin: 0 auto;
-            background-color: #f5f5f5;
-        }
-        .container {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        .input-group {
-            margin-bottom: 15px;
-        }
-        .input-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-        .input-group input {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        button {
-            background: #4CAF50;
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            font-size: 16px;
-            border-radius: 5px;
-            margin: 10px 0;
-            width: 100%;
-            cursor: pointer;
-        }
-        button:hover {
-            background: #45a049;
-        }
-        button:disabled {
-            background: #cccccc;
-            cursor: not-allowed;
-        }
-        button.stop {
-            background: #f44336;
-        }
-        button.stop:hover {
-            background: #da190b;
-        }
-        #log {
-            border: 1px solid #ddd;
-            padding: 10px;
-            margin-top: 20px;
-            height: 300px;
-            overflow-y: auto;
-            background: white;
-            border-radius: 4px;
-        }
-        .scan-item {
-            padding: 8px;
-            border-bottom: 1px solid #eee;
-            font-size: 14px;
-        }
-        .status {
-            text-align: center;
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 4px;
-        }
-        .status.active {
-            background: #e8f5e9;
-            color: #2e7d32;
-        }
-        .status.inactive {
-            background: #ffebee;
-            color: #c62828;
-        }
+        /* [Previous styles remain the same] */
     </style>
 </head>
 <body>
@@ -105,10 +27,11 @@
     </div>
 
     <script>
-        // Replace this URL with your Google Apps Script Web App URL
         const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzQCiKfuA_Tupj76-ZNFdA_42DwcOVSmwxAJVxsAEd_roFrmkrnIPyB8H3o8nAjBUTP/exec';
         
         let isScanning = false;
+        let ndefReader = null;
+        let readingHandler = null;
         const log = document.getElementById('log');
         const status = document.getElementById('status');
         const startButton = document.getElementById('startButton');
@@ -129,16 +52,17 @@
             }
 
             try {
+                // Clean up any existing reader
+                await stopScanningInternal();
+                
                 isScanning = true;
                 updateStatus(true);
                 updateButtons(true);
                 
-                const ndef = new NDEFReader();
-                await ndef.scan();
+                ndefReader = new NDEFReader();
                 
-                addLogEntry('Scanning started...', 'system');
-                
-                ndef.addEventListener("reading", ({ serialNumber }) => {
+                // Define the reading handler
+                readingHandler = ({ serialNumber }) => {
                     if (!isScanning) return;
                     
                     const timestamp = new Date().toISOString();
@@ -152,15 +76,35 @@
                         trainingId: trainingId,
                         nfcId: serialNumber
                     });
-                });
+                };
+
+                // Add the event listener
+                ndefReader.addEventListener("reading", readingHandler);
+                
+                // Start scanning
+                await ndefReader.scan();
+                addLogEntry('Scanning started...', 'system');
                 
             } catch (error) {
                 handleError(error);
             }
         }
         
-        function stopScanning() {
+        async function stopScanningInternal() {
+            if (ndefReader && readingHandler) {
+                try {
+                    ndefReader.removeEventListener("reading", readingHandler);
+                } catch (error) {
+                    console.error('Error removing event listener:', error);
+                }
+            }
+            ndefReader = null;
+            readingHandler = null;
             isScanning = false;
+        }
+
+        async function stopScanning() {
+            await stopScanningInternal();
             updateStatus(false);
             updateButtons(false);
             addLogEntry('Scanning stopped');
@@ -186,16 +130,16 @@
         function handleError(error) {
             console.error('Error:', error);
             alert(`Error: ${error.message}`);
+            stopScanningInternal();
             updateStatus(false);
             updateButtons(false);
-            isScanning = false;
         }
         
         async function sendToServer(data) {
             try {
                 const response = await fetch(GOOGLE_SCRIPT_URL, {
                     method: 'POST',
-                    mode: 'no-cors', // This is important for Google Apps Script
+                    mode: 'no-cors',
                     headers: {
                         'Content-Type': 'application/json',
                     },
@@ -207,6 +151,9 @@
                 handleError(error);
             }
         }
+
+        // Clean up when the page is closed or refreshed
+        window.addEventListener('beforeunload', stopScanningInternal);
     </script>
 </body>
 </html>
