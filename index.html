@@ -129,7 +129,6 @@
     </style>
 </head>
 <body>
-    <!-- Your existing HTML body content remains the same -->
     <div class="container">
         <h1>NFC Scanner</h1>
         <div class="input-group">
@@ -146,6 +145,158 @@
         <div id="log"></div>
     </div>
 
-    <!-- Your existing JavaScript remains the same -->
+    <script>
+        // Replace with your actual Google Script URL
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzQCiKfuA_Tupj76-ZNFdA_42DwcOVSmwxAJVxsAEd_roFrmkrnIPyB8H3o8nAjBUTP/exec';
+        
+        class NFCScanner {
+            constructor() {
+                this.isScanning = false;
+                this.ndef = null;
+                this.currentTrainerName = '';
+                this.currentTrainingId = '';
+                this.abortController = null;
+                
+                // DOM elements
+                this.log = document.getElementById('log');
+                this.status = document.getElementById('status');
+                this.startButton = document.getElementById('startButton');
+                this.stopButton = document.getElementById('stopButton');
+                
+                // Bind event handlers
+                this.startButton.addEventListener('click', () => this.startScanning());
+                this.stopButton.addEventListener('click', () => this.stopScanning());
+                
+                // Initial button state
+                this.updateButtons(false);
+            }
+            
+            async startScanning() {
+                if (!('NDEFReader' in window)) {
+                    alert('WebNFC is not supported in this browser. Please use Chrome on Android.');
+                    return;
+                }
+
+                const trainerName = document.getElementById('trainer-name').value;
+                const trainingId = document.getElementById('training-id').value;
+                
+                if (!trainerName || !trainingId) {
+                    alert('Please enter both Trainer Name and Training ID');
+                    return;
+                }
+
+                try {
+                    // Stop any existing scanning session
+                    await this.stopScanning();
+                    
+                    // Create new abort controller for this session
+                    this.abortController = new AbortController();
+                    
+                    this.isScanning = true;
+                    this.currentTrainerName = trainerName;
+                    this.currentTrainingId = trainingId;
+                    
+                    this.ndef = new NDEFReader();
+                    
+                    // Start scanning with the abort signal
+                    await this.ndef.scan({ signal: this.abortController.signal });
+                    
+                    this.updateStatus(true);
+                    this.updateButtons(true);
+                    this.addLogEntry('Scanning started...');
+                    
+                    this.ndef.addEventListener("reading", (event) => {
+                        if (!this.isScanning) return;
+                        this.handleReading(event);
+                    }, { signal: this.abortController.signal });
+                    
+                } catch (error) {
+                    if (error.name !== 'AbortError') {
+                        this.handleError(error);
+                    }
+                }
+            }
+            
+            async stopScanning() {
+                if (this.abortController) {
+                    this.abortController.abort();
+                    this.abortController = null;
+                }
+                
+                this.isScanning = false;
+                this.ndef = null;
+                this.currentTrainerName = '';
+                this.currentTrainingId = '';
+                
+                this.updateStatus(false);
+                this.updateButtons(false);
+                this.addLogEntry('Scanning stopped');
+            }
+            
+            handleReading(event) {
+                const timestamp = new Date().toISOString();
+                const logEntry = `${new Date().toLocaleTimeString()} - Trainer: ${this.currentTrainerName} - Training: ${this.currentTrainingId} - NFC: ${event.serialNumber}`;
+                
+                this.addLogEntry(logEntry);
+                
+                this.sendToServer({
+                    timestamp: timestamp,
+                    trainerName: this.currentTrainerName,
+                    trainingId: this.currentTrainingId,
+                    nfcId: event.serialNumber
+                });
+            }
+            
+            updateStatus(isActive) {
+                this.status.className = `status ${isActive ? 'active' : 'inactive'}`;
+                this.status.textContent = `Scanner ${isActive ? 'active - ready to scan' : 'inactive'}`;
+            }
+
+            updateButtons(isScanning) {
+                this.startButton.disabled = isScanning;
+                this.stopButton.disabled = !isScanning;
+            }
+            
+            addLogEntry(message) {
+                const div = document.createElement('div');
+                div.className = 'scan-item';
+                div.textContent = message;
+                this.log.insertBefore(div, this.log.firstChild);
+            }
+            
+            handleError(error) {
+                console.error('Error:', error);
+                alert(`Error: ${error.message}`);
+                this.stopScanning();
+            }
+            
+            async sendToServer(data) {
+                try {
+                    const response = await fetch(GOOGLE_SCRIPT_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(data)
+                    });
+                    
+                    this.addLogEntry('Data sent successfully');
+                } catch (error) {
+                    this.handleError(error);
+                }
+            }
+        }
+
+        // Initialize scanner when page loads
+        const scanner = new NFCScanner();
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (scanner) {
+                scanner.stopScanning();
+            }
+        });
+    </script>
 </body>
 </html>
