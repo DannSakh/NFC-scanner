@@ -91,7 +91,7 @@
         </div>
         <div class="input-group">
             <label for="training-id">Training:</label>
-            <input type="text" id="training-id" placeholder="Enter training number" required>
+            <input type="text" id="training-id" placeholder="Enter training name" required>
         </div>
         <button id="startButton" onclick="startScanning()">Start Scanning</button>
         <button id="stopButton" onclick="stopScanning()" class="stop" disabled>Stop Scanning</button>
@@ -136,7 +136,8 @@
                 readingHandler = ({ serialNumber }) => {
                     if (!isScanning) return;
                     
-                    const timestamp = new Date().toISOString();
+                    // Updated timestamp to use Moscow timezone (GMT+3)
+                    const timestamp = new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' });
                     const formattedNfcId = serialNumber
                         .replace(/[^a-fA-F0-9]/g, '')
                         .toUpperCase()
