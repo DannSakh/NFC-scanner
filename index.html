@@ -1,11 +1,103 @@
 <!DOCTYPE html>
 <html lang="en">
-<!-- [Previous head and style sections remain exactly the same...] -->
 <head>
-    <!-- [Previous head content remains the same...] -->
+    <title>NFC Scanner</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            background-color: #4CAF50;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            margin-bottom: 10px;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        button.stop {
+            background-color: #f44336;
+        }
+        .status {
+            text-align: center;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .active {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .inactive {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+        .scan-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+        }
+        #log {
+            margin-top: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
 </head>
 <body>
-    <!-- [Previous body content remains the same until the script section...] -->
+    <div class="container">
+        <h1>NFC Scanner</h1>
+        <div class="input-group">
+            <label for="trainer-name">Trainer's Name:</label>
+            <input type="text" id="trainer-name" placeholder="Enter trainer's name" required>
+        </div>
+        <div class="input-group">
+            <label for="training-id">Training:</label>
+            <input type="text" id="training-id" placeholder="Enter training name" required>
+        </div>
+        <button id="startButton" onclick="startScanning()">Start Scanning</button>
+        <button id="stopButton" onclick="stopScanning()" class="stop" disabled>Stop Scanning</button>
+        <div id="status" class="status inactive">Scanner inactive</div>
+        <div id="log"></div>
+    </div>
 
     <script>
         const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwf-sQ5LVhriYEh8gsDr53EDkczVnH2LCeafu_Rj07yz8V3O_5UWNzv6ghlL2Hc4TOo/exec';
@@ -44,24 +136,14 @@
                 readingHandler = ({ serialNumber }) => {
                     if (!isScanning) return;
                     
-                    // Updated timestamp to use exact local time
-                    const now = new Date();
-                    const timestamp = now.toLocaleString('en-US', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                        hour12: false,
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit'
-                    });
-                    
+                    // Updated timestamp to use Moscow timezone (GMT+3)
+                    const timestamp = new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' });
                     const formattedNfcId = serialNumber
                         .replace(/[^a-fA-F0-9]/g, '')
                         .toUpperCase()
                         .trim();
                     
-                    const logEntry = `${now.toLocaleTimeString()} - Trainer: ${trainerName} - Training: ${training} - NFC: ${formattedNfcId}`;
+                    const logEntry = `${new Date().toLocaleTimeString()} - Trainer: ${trainerName} - Training: ${training} - NFC: ${formattedNfcId}`;
                     
                     addLogEntry(logEntry);
                     
@@ -81,8 +163,70 @@
                 handleError(error);
             }
         }
+        
+        async function stopScanningInternal() {
+            if (ndefReader && readingHandler) {
+                try {
+                    ndefReader.removeEventListener("reading", readingHandler);
+                } catch (error) {
+                    console.error('Error removing event listener:', error);
+                }
+            }
+            ndefReader = null;
+            readingHandler = null;
+            isScanning = false;
+        }
 
-        // [Rest of the code remains exactly the same...]
+        async function stopScanning() {
+            await stopScanningInternal();
+            updateStatus(false);
+            updateButtons(false);
+            addLogEntry('Scanning stopped');
+        }
+        
+        function updateStatus(isActive) {
+            status.className = `status ${isActive ? 'active' : 'inactive'}`;
+            status.textContent = `Scanner ${isActive ? 'active - ready to scan' : 'inactive'}`;
+        }
+
+        function updateButtons(isScanning) {
+            startButton.disabled = isScanning;
+            stopButton.disabled = !isScanning;
+        }
+        
+        function addLogEntry(message) {
+            const div = document.createElement('div');
+            div.className = 'scan-item';
+            div.textContent = message;
+            log.insertBefore(div, log.firstChild);
+        }
+        
+        function handleError(error) {
+            console.error('Error:', error);
+            alert(`Error: ${error.message}`);
+            stopScanningInternal();
+            updateStatus(false);
+            updateButtons(false);
+        }
+        
+        async function sendToServer(data) {
+            try {
+                const response = await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                addLogEntry('Data sent successfully');
+            } catch (error) {
+                handleError(error);
+            }
+        }
+
+        window.addEventListener('beforeunload', stopScanningInternal);
     </script>
 </body>
 </html>
