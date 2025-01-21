@@ -110,17 +110,6 @@
         const startButton = document.getElementById('startButton');
         const stopButton = document.getElementById('stopButton');
 
-        function getFormattedTimestamp() {
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            const seconds = String(now.getSeconds()).padStart(2, '0');
-            return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
-        }
-
         async function startScanning() {
             if (!('NDEFReader' in window)) {
                 alert('WebNFC is not supported in this browser. Please use Chrome on Android.');
@@ -147,18 +136,21 @@
                 readingHandler = ({ serialNumber }) => {
                     if (!isScanning) return;
                     
-                    const timestamp = getFormattedTimestamp();
+                    const now = new Date();
+                    const date = now.toLocaleDateString('en-GB').split('/').join('.');
+                    const time = now.toLocaleTimeString('en-GB', { hour12: false });
+                    
                     const formattedNfcId = serialNumber
                         .replace(/[^a-fA-F0-9]/g, '')
                         .toUpperCase()
                         .trim();
                     
-                    const logEntry = `${new Date().toLocaleTimeString()} - Trainer: ${trainerName} - Training: ${training} - NFC: ${formattedNfcId}`;
+                    const logEntry = `${time} - Trainer: ${trainerName} - Training: ${training} - NFC: ${formattedNfcId}`;
                     
                     addLogEntry(logEntry);
                     
                     sendToServer({
-                        timestamp: timestamp,
+                        timestamp: `${date} ${time}`,
                         deviceId: trainerName,
                         number: training,
                         nfcId: formattedNfcId
