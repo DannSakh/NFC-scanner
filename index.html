@@ -86,12 +86,12 @@
     <div class="container">
         <h1>NFC Scanner</h1>
         <div class="input-group">
-            <label for="trainer-name">Device ID:</label>
-            <input type="text" id="trainer-name" placeholder="Enter Device ID" required>
+            <label for="trainer-name">Trainer's Name:</label>
+            <input type="text" id="trainer-name" placeholder="Enter trainer's name" required>
         </div>
         <div class="input-group">
-            <label for="training-id">Number:</label>
-            <input type="text" id="training-id" placeholder="Enter number" required>
+            <label for="training-id">Training:</label>
+            <input type="text" id="training-id" placeholder="Enter training number" required>
         </div>
         <button id="startButton" onclick="startScanning()">Start Scanning</button>
         <button id="stopButton" onclick="stopScanning()" class="stop" disabled>Stop Scanning</button>
@@ -100,7 +100,7 @@
     </div>
 
     <script>
-        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzDI0zmGxe-OfrfbYGwl2pJVwDWBALlDXYyQx9Lmhz_QJfcom2URvxtwpDACFAOIbWQ/exec';
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwf-sQ5LVhriYEh8gsDr53EDkczVnH2LCeafu_Rj07yz8V3O_5UWNzv6ghlL2Hc4TOo/exec';
         
         let isScanning = false;
         let ndefReader = null;
@@ -116,11 +116,11 @@
                 return;
             }
 
-            const deviceId = document.getElementById('trainer-name').value;
-            const number = document.getElementById('training-id').value;
+            const trainerName = document.getElementById('trainer-name').value;
+            const training = document.getElementById('training-id').value;
             
-            if (!deviceId || !number) {
-                alert('Please enter both Device ID and Number');
+            if (!trainerName || !training) {
+                alert('Please enter both Trainer\'s Name and Training');
                 return;
             }
 
@@ -142,14 +142,14 @@
                         .toUpperCase()
                         .trim();
                     
-                    const logEntry = `${new Date().toLocaleTimeString()} - Device: ${deviceId} - Number: ${number} - NFC: ${formattedNfcId}`;
+                    const logEntry = `${new Date().toLocaleTimeString()} - Trainer: ${trainerName} - Training: ${training} - NFC: ${formattedNfcId}`;
                     
                     addLogEntry(logEntry);
                     
                     sendToServer({
                         timestamp: timestamp,
-                        deviceId: deviceId,
-                        number: number,
+                        deviceId: trainerName,
+                        number: training,
                         nfcId: formattedNfcId
                     });
                 };
