@@ -136,8 +136,7 @@
                 readingHandler = ({ serialNumber }) => {
                     if (!isScanning) return;
                     
-                    // Updated timestamp to use Moscow timezone (GMT+3)
-                    const timestamp = new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' });
+                    const timestamp = new Date().toLocaleString();
                     const formattedNfcId = serialNumber
                         .replace(/[^a-fA-F0-9]/g, '')
                         .toUpperCase()
