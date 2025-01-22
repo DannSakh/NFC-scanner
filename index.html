@@ -153,10 +153,6 @@
                         .toUpperCase()
                         .trim();
                     
-                    const logEntry = `${new Date().toLocaleTimeString()} - Trainer: ${trainerName} - Training: ${training} - NFC: ${formattedNfcId}`;
-                    
-                    addLogEntry(logEntry);
-                    
                     sendToServer({
                         timestamp: timestamp,
                         deviceId: trainerName,
@@ -167,7 +163,6 @@
 
                 ndefReader.addEventListener("reading", readingHandler);
                 await ndefReader.scan();
-                addLogEntry('Scanning started...', 'system');
                 
             } catch (error) {
                 handleError(error);
