@@ -136,21 +136,16 @@
                 readingHandler = ({ serialNumber }) => {
                     if (!isScanning) return;
                     
-                    const now = new Date();
-                    const date = now.toLocaleDateString('en-GB').split('/').join('.');
-                    const time = now.toLocaleTimeString('en-GB', { hour12: false });
-                    
+                    // Updated timestamp to use Moscow timezone (GMT+3)
+                    const timestamp = new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' });
                     const formattedNfcId = serialNumber
                         .replace(/[^a-fA-F0-9]/g, '')
                         .toUpperCase()
                         .trim();
                     
-                    const logEntry = `${time} - Trainer: ${trainerName} - Training: ${training} - NFC: ${formattedNfcId}`;
-                    
-                    addLogEntry(logEntry);
-                    
+                    // Still collecting all data but not displaying it in the log
                     sendToServer({
-                        timestamp: `${date} ${time}`,
+                        timestamp: timestamp,
                         deviceId: trainerName,
                         number: training,
                         nfcId: formattedNfcId
@@ -159,7 +154,6 @@
 
                 ndefReader.addEventListener("reading", readingHandler);
                 await ndefReader.scan();
-                addLogEntry('Scanning started...', 'system');
                 
             } catch (error) {
                 handleError(error);
@@ -183,7 +177,6 @@
             await stopScanningInternal();
             updateStatus(false);
             updateButtons(false);
-            addLogEntry('Scanning stopped');
         }
         
         function updateStatus(isActive) {
@@ -222,6 +215,7 @@
                     body: JSON.stringify(data)
                 });
                 
+                // Only show "Data sent successfully" in the log
                 addLogEntry('Data sent successfully');
             } catch (error) {
                 handleError(error);
