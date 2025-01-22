@@ -105,6 +105,7 @@
         let isScanning = false;
         let ndefReader = null;
         let readingHandler = null;
+        let registrationCount = 0; // Counter for successful registrations
         const log = document.getElementById('log');
         const status = document.getElementById('status');
         const startButton = document.getElementById('startButton');
@@ -141,6 +142,7 @@
                 isScanning = true;
                 updateStatus(true);
                 updateButtons(true);
+                registrationCount = 0; // Reset counter when starting new session
                 
                 ndefReader = new NDEFReader();
                 
@@ -208,7 +210,7 @@
         
         function handleError(error) {
             console.error('Error:', error);
-            alert(`Error: ${error.message}`);
+            addLogEntry('Registration failed');
             stopScanningInternal();
             updateStatus(false);
             updateButtons(false);
@@ -225,7 +227,8 @@
                     body: JSON.stringify(data)
                 });
                 
-                addLogEntry('Data sent successfully');
+                registrationCount++; // Increment counter on successful registration
+                addLogEntry(`${registrationCount}. Delegate registered successfully`);
             } catch (error) {
                 handleError(error);
             }
