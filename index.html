@@ -1,142 +1,240 @@
-<script>
-    // УКАЗАТЕЛЬ: Ваш URL-адрес Google Apps Script
-    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwf-sQ5LVhriYEh8gsDr53EDkczVnH2LCeafu_Rj07yz8V3O_5UWNzv6ghlL2Hc4TOo/exec';
-    
-    let isScanning = false;
-    let ndefReader = null;
-    let readingHandler = null;
-    let registrationCount = 0; // Counter for successful registrations
-    const log = document.getElementById('log');
-    const statusDiv = document.getElementById('status');
-    const startButton = document.getElementById('startButton');
-    const stopButton = document.getElementById('stopButton');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>NFC Scanner</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            background-color: #4CAF50;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            margin-bottom: 10px;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        button.stop {
+            background-color: #f44336;
+        }
+        .status {
+            text-align: center;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .active {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .inactive {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+        .scan-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+        }
+        #log {
+            margin-top: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NFC Scanner</h1>
+        <div class="input-group">
+            <label for="trainer-name">Trainer's Name:</label>
+            <input type="text" id="trainer-name" placeholder="Enter trainer's name" required>
+        </div>
+        <div class="input-group">
+            <label for="training-id">Training:</label>
+            <input type="text" id="training-id" placeholder="Enter training name" required>
+        </div>
+        <button id="startButton" onclick="startScanning()">Start Scanning</button>
+        <button id="stopButton" onclick="stopScanning()" class="stop" disabled>Stop Scanning</button>
+        <div id="status" class="status inactive">Scanner inactive</div>
+        <div id="log"></div>
+    </div>
 
-    function getFormattedDateAndTime() {
-        const now = new Date();
+    <script>
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwf-sQ5LVhriYEh8gsDr53EDkczVnH2LCeafu_Rj07yz8V3O_5UWNzv6ghlL2Hc4TOo/exec';
         
-        // Разделяем дату и время, как того требует ваша таблица (Столбцы A и B)
-        const date = now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        const time = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        
-        return { date, time };
-    }
+        let isScanning = false;
+        let ndefReader = null;
+        let readingHandler = null;
+        let registrationCount = 0; // Counter for successful registrations
+        const log = document.getElementById('log');
+        const status = document.getElementById('status');
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
 
-    async function startScanning() {
-        if (!('NDEFReader' in window)) {
-            alert('WebNFC is not supported in this browser. Please use Chrome on Android.');
-            return;
+        function getFormattedTimestamp() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
         }
 
-        const trainerName = document.getElementById('trainer-name').value;
-        const training = document.getElementById('training-id').value;
-        
-        if (!trainerName || !training) {
-            alert('Please enter both Trainer\'s Name and Training');
-            return;
-        }
+        async function startScanning() {
+            if (!('NDEFReader' in window)) {
+                alert('WebNFC is not supported in this browser. Please use Chrome on Android.');
+                return;
+            }
 
-        try {
-            await stopScanningInternal();
+            const trainerName = document.getElementById('trainer-name').value;
+            const training = document.getElementById('training-id').value;
             
-            isScanning = true;
-            updateStatus(true);
-            updateButtons(true);
-            registrationCount = 0;
-            
-            ndefReader = new NDEFReader();
-            
-            readingHandler = ({ serialNumber }) => {
-                if (!isScanning) return;
-                
-                const { date, time } = getFormattedDateAndTime();
-                
-                const formattedNfcId = serialNumber
-                    .replace(/[^a-fA-F0-9]/g, '')
-                    .toUpperCase()
-                    .trim();
-                
-                // *** ИСПРАВЛЕНИЕ: ОТПРАВЛЯЕМ ЛОГИЧНЫЕ И РАЗДЕЛЕННЫЕ ПОЛЯ ***
-                sendToServer({
-                    date: date,             // Столбец A
-                    time: time,             // Столбец B
-                    trainerName: trainerName, // Столбец C (исправлено с deviceId)
-                    trainingName: training, // Столбец D (исправлено с number)
-                    nfcUid: formattedNfcId  // Столбец E (исправлено с nfcId)
-                });
-            };
+            if (!trainerName || !training) {
+                alert('Please enter both Trainer\'s Name and Training');
+                return;
+            }
 
-            ndefReader.addEventListener("reading", readingHandler);
-            await ndefReader.scan();
-            
-        } catch (error) {
-            handleError(error);
-        }
-    }
-    
-    async function stopScanningInternal() {
-        if (ndefReader && readingHandler) {
             try {
-                // Если считыватель активен, пробуем его остановить
-                ndefReader.removeEventListener("reading", readingHandler); 
+                await stopScanningInternal();
+                
+                isScanning = true;
+                updateStatus(true);
+                updateButtons(true);
+                registrationCount = 0; // Reset counter when starting new session
+                
+                ndefReader = new NDEFReader();
+                
+                readingHandler = ({ serialNumber }) => {
+                    if (!isScanning) return;
+                    
+                    const timestamp = getFormattedTimestamp();
+                    const formattedNfcId = serialNumber
+                        .replace(/[^a-fA-F0-9]/g, '')
+                        .toUpperCase()
+                        .trim();
+                    
+                    sendToServer({
+                        timestamp: timestamp,
+                        deviceId: trainerName,
+                        number: training,
+                        nfcId: formattedNfcId
+                    });
+                };
+
+                ndefReader.addEventListener("reading", readingHandler);
+                await ndefReader.scan();
+                
             } catch (error) {
-                console.error('Error removing event listener:', error);
+                handleError(error);
             }
         }
-        ndefReader = null;
-        readingHandler = null;
-        isScanning = false;
-    }
-
-    async function stopScanning() {
-        await stopScanningInternal();
-        updateStatus(false);
-        updateButtons(false);
-        addLogEntry('Scanning stopped');
-    }
-    
-    function updateStatus(isActive) {
-        statusDiv.className = `status ${isActive ? 'active' : 'inactive'}`;
-        statusDiv.textContent = `Scanner ${isActive ? 'active - ready to scan' : 'inactive'}`;
-    }
-
-    function updateButtons(isScanning) {
-        startButton.disabled = isScanning;
-        stopButton.disabled = !isScanning;
-    }
-    
-    function addLogEntry(message) {
-        const div = document.createElement('div');
-        div.className = 'scan-item';
-        div.textContent = message;
-        log.insertBefore(div, log.firstChild);
-    }
-    
-    function handleError(error) {
-        console.error('Error:', error);
-        addLogEntry(`Registration failed: ${error.message || 'Unknown error'}`);
-        stopScanningInternal();
-        updateStatus(false);
-        updateButtons(false);
-    }
-    
-    async function sendToServer(data) {
-        try {
-            // Отправляем данные на сервер с правильными названиями полей
-            await fetch(GOOGLE_SCRIPT_URL, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(data)
-            });
-            
-            registrationCount++;
-            addLogEntry(`${registrationCount}. Delegate registered successfully`);
-        } catch (error) {
-            handleError(error);
+        
+        async function stopScanningInternal() {
+            if (ndefReader && readingHandler) {
+                try {
+                    ndefReader.removeEventListener("reading", readingHandler);
+                } catch (error) {
+                    console.error('Error removing event listener:', error);
+                }
+            }
+            ndefReader = null;
+            readingHandler = null;
+            isScanning = false;
         }
-    }
 
-    window.addEventListener('beforeunload', stopScanningInternal);
-</script>
+        async function stopScanning() {
+            await stopScanningInternal();
+            updateStatus(false);
+            updateButtons(false);
+            addLogEntry('Scanning stopped');
+        }
+        
+        function updateStatus(isActive) {
+            status.className = `status ${isActive ? 'active' : 'inactive'}`;
+            status.textContent = `Scanner ${isActive ? 'active - ready to scan' : 'inactive'}`;
+        }
+
+        function updateButtons(isScanning) {
+            startButton.disabled = isScanning;
+            stopButton.disabled = !isScanning;
+        }
+        
+        function addLogEntry(message) {
+            const div = document.createElement('div');
+            div.className = 'scan-item';
+            div.textContent = message;
+            log.insertBefore(div, log.firstChild);
+        }
+        
+        function handleError(error) {
+            console.error('Error:', error);
+            addLogEntry('Registration failed');
+            stopScanningInternal();
+            updateStatus(false);
+            updateButtons(false);
+        }
+        
+        async function sendToServer(data) {
+            try {
+                const response = await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                registrationCount++; // Increment counter on successful registration
+                addLogEntry(`${registrationCount}. Delegate registered successfully`);
+            } catch (error) {
+                handleError(error);
+            }
+        }
+
+        window.addEventListener('beforeunload', stopScanningInternal);
+    </script>
+</body>
+</html>
