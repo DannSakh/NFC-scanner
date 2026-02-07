@@ -1,157 +1,203 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NFC Group Scanner</title>
+    <title>NFC Scanner</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 15px; background: #eee; }
-        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 500px; margin: 0 auto; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            padding: 20px; 
+            background-color: #f2f2f7; 
+            color: #1c1c1e;
+        }
+        .container { 
+            background: white; 
+            padding: 24px; 
+            border-radius: 20px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08); 
+            max-width: 400px; 
+            margin: 0 auto; 
+        }
         
-        h2 { margin-top: 0; text-align: center; color: #333; }
+        h2 { 
+            text-align: center; 
+            margin-top: 0; 
+            font-weight: 700; 
+            color: #1c1c1e;
+        }
         
-        button { width: 100%; padding: 16px; margin: 8px 0; font-size: 18px; border: none; border-radius: 8px; cursor: pointer; color: white; font-weight: bold; }
-        .btn-start { background: #28a745; }
-        .btn-stop { background: #dc3545; display: none; }
-        .btn-send { background: #007bff; display: none; }
+        /* Status Bar */
+        #status { 
+            text-align: center; 
+            margin-bottom: 20px; 
+            font-weight: 600; 
+            color: #8e8e93; 
+            font-size: 14px;
+        }
+
+        /* Buttons */
+        button { 
+            width: 100%; 
+            padding: 18px; 
+            margin-bottom: 12px; 
+            font-size: 17px; 
+            border: none; 
+            border-radius: 14px; 
+            cursor: pointer; 
+            font-weight: 600; 
+            transition: transform 0.1s;
+        }
+        button:active { transform: scale(0.98); }
         
-        #log { margin-top: 15px; max-height: 300px; overflow-y: auto; background: #fafafa; border: 1px solid #ddd; border-radius: 8px; }
-        .row { padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; font-family: monospace; font-size: 14px; }
-        .row:last-child { border-bottom: none; }
+        .btn-start { background-color: #34c759; color: white; } /* iOS Green */
+        .btn-stop { background-color: #ff3b30; color: white; display: none; } /* iOS Red */
+        .btn-send { background-color: #007bff; color: white; display: none; margin-top: 10px; } /* iOS Blue */
         
-        .status { text-align: center; margin-bottom: 10px; font-weight: bold; color: #555; }
+        /* List */
+        #log { 
+            margin-top: 10px; 
+            max-height: 350px; 
+            overflow-y: auto; 
+            border-top: 1px solid #e5e5ea; 
+        }
+        .row { 
+            padding: 12px 5px; 
+            border-bottom: 1px solid #e5e5ea; 
+            display: flex; 
+            justify-content: space-between; 
+            font-size: 15px; 
+            font-variant-numeric: tabular-nums;
+        }
+        .time-col { color: #8e8e93; font-size: 13px; }
+        .id-col { font-weight: 500; font-family: monospace; }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <h2>Скан Группы</h2>
-    <div class="status" id="status">Ожидание...</div>
+<div class="container">
+    <h2>Attendance Scan</h2>
+    <div id="status">Ready to start</div>
 
-    <button id="startBtn" class="btn-start">▶ НАЧАТЬ СЕССИЮ</button>
-    <button id="stopBtn" class="btn-stop">⏹ СТОП</button>
+    <button id="startBtn" class="btn-start">▶ Start Scanning</button>
+    <button id="stopBtn" class="btn-stop">⏹ Stop & Review</button>
     
     <div id="log"></div>
     
-    <button id="sendBtn" class="btn-send">✉ ОТПРАВИТЬ ДАННЫЕ</button>
+    <button id="sendBtn" class="btn-send">✉ Send Report</button>
 </div>
 
 <script>
-    const SCRIPT_URL = 'ТВОЙ_URL_ОТ_GOOGLE_APPS_SCRIPT'; // <--- Вставь ссылку сюда
+    // --- CONFIGURATION ---
+    const SCRIPT_URL = 'PASTE_YOUR_GOOGLE_SCRIPT_URL_HERE'; 
+    // ---------------------
 
     let ndef;
-    let currentSession = []; // Массив для ТЕКУЩЕЙ группы
+    let currentSession = []; 
     let isScanning = false;
 
-    // Форматирование даты: dd.mm.yyyy
-    function formatDate(date) {
-        let d = date.getDate().toString().padStart(2, '0');
-        let m = (date.getMonth() + 1).toString().padStart(2, '0');
-        let y = date.getFullYear();
-        return `${d}.${m}.${y}`;
-    }
+    // Helpers
+    const formatTime = d => `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+    const formatDate = d => `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getFullYear()}`;
 
-    // Форматирование времени: hh:mm
-    function formatTime(date) {
-        let h = date.getHours().toString().padStart(2, '0');
-        let m = date.getMinutes().toString().padStart(2, '0');
-        return `${h}:${m}`;
-    }
+    const statusEl = document.getElementById('status');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const sendBtn = document.getElementById('sendBtn');
+    const logEl = document.getElementById('log');
 
-    document.getElementById('startBtn').addEventListener('click', async () => {
+    // 1. START
+    startBtn.addEventListener('click', async () => {
         try {
-            if (!("NDEFReader" in window)) {
-                alert("Нужен Android + Chrome + HTTPS");
-                return;
-            }
+            if (!("NDEFReader" in window)) return alert("Error: Use Chrome on Android (HTTPS required).");
+            
             ndef = new NDEFReader();
             await ndef.scan();
             
             isScanning = true;
-            updateUI(true);
-            document.getElementById('status').innerText = "📡 Сканируйте бейджи...";
-            
+            toggleUI(true);
+            statusEl.innerText = "📡 Scanning... Tap badges on back of phone.";
+            statusEl.style.color = "#34c759";
+
             ndef.onreading = event => {
                 const id = event.serialNumber;
                 const now = new Date();
                 
-                // Простая защита от двойного скана (задержка 2 сек)
+                // Duplicate prevention (2 seconds)
                 if (currentSession.length > 0) {
                     const last = currentSession[currentSession.length - 1];
-                    if (last.id === id && (now - last.rawObj) < 2000) return; 
+                    if (last.id === id && (now - last.rawObj) < 2000) return;
                 }
 
-                // Добавляем запись
-                const record = {
-                    date: formatDate(now),
-                    time: formatTime(now),
-                    id: id,
-                    rawObj: now // техническое поле для сверки времени
+                const rec = { 
+                    date: formatDate(now), 
+                    time: formatTime(now), 
+                    id: id, 
+                    rawObj: now 
                 };
                 
-                currentSession.push(record);
-                renderRow(record);
-                
-                // Вибрация
-                if (navigator.vibrate) navigator.vibrate(100);
+                currentSession.push(rec);
+                renderRow(rec);
+                if (navigator.vibrate) navigator.vibrate(50);
             };
 
-        } catch (err) {
-            alert("Ошибка: " + err);
-        }
+        } catch (err) { alert("Start Error: " + err); }
     });
 
-    document.getElementById('stopBtn').addEventListener('click', () => {
+    // 2. STOP
+    stopBtn.addEventListener('click', () => {
         isScanning = false;
-        updateUI(false);
-        document.getElementById('status').innerText = `Сессия завершена. ${currentSession.length} чел.`;
+        toggleUI(false);
+        statusEl.innerText = `Session Paused. Count: ${currentSession.length}`;
+        statusEl.style.color = "#1c1c1e";
     });
 
-    document.getElementById('sendBtn').addEventListener('click', () => {
-        if (currentSession.length === 0) return alert("Нет данных для отправки!");
+    // 3. SEND
+    sendBtn.addEventListener('click', () => {
+        if (currentSession.length === 0) return alert("List is empty!");
 
-        const btn = document.getElementById('sendBtn');
-        btn.innerText = "⏳ Отправка...";
-        btn.disabled = true;
+        sendBtn.innerText = "⏳ Sending...";
+        sendBtn.disabled = true;
 
         fetch(SCRIPT_URL, {
             method: 'POST',
             mode: 'no-cors',
             body: JSON.stringify({ scans: currentSession })
         }).then(() => {
-            alert("✅ Ушло! Данные в таблице и на почте.");
-            // Сброс для новой группы
+            alert("✅ Sent successfully!");
+            
+            // Reset for next group
             currentSession = [];
-            document.getElementById('log').innerHTML = "";
-            btn.innerText = "✉ ОТПРАВИТЬ ДАННЫЕ";
-            btn.disabled = false;
-            document.getElementById('status').innerText = "Готов к новой группе";
-            updateUI(false); // Вернуть кнопку Старт
-            // Скрываем кнопку отправки, пока не начнем новую сессию
-            document.getElementById('sendBtn').style.display = 'none'; 
+            logEl.innerHTML = "";
+            sendBtn.innerText = "✉ Send Report";
+            sendBtn.disabled = false;
+            statusEl.innerText = "Ready for next group";
+            
+            // Hide send button until we scan new people
+            sendBtn.style.display = 'none';
         }).catch(err => {
-            alert("Ошибка сети: " + err);
-            btn.disabled = false;
+            alert("Network Error: " + err);
+            sendBtn.disabled = false;
+            sendBtn.innerText = "✉ Retry Send";
         });
     });
 
     function renderRow(rec) {
         const div = document.createElement('div');
         div.className = 'row';
-        // A: Date, B: Time, C: ID
-        div.innerHTML = `<span>${rec.date}</span> <span>${rec.time}</span> <span>${rec.id}</span>`;
-        document.getElementById('log').prepend(div);
+        div.innerHTML = `<span class="time-col">${rec.time}</span> <span class="id-col">${rec.id}</span>`;
+        logEl.prepend(div);
     }
 
-    function updateUI(scanning) {
-        document.getElementById('startBtn').style.display = scanning ? 'none' : 'block';
-        document.getElementById('stopBtn').style.display = scanning ? 'block' : 'none';
+    function toggleUI(scanning) {
+        startBtn.style.display = scanning ? 'none' : 'block';
+        stopBtn.style.display = scanning ? 'block' : 'none';
         
-        // Кнопку "Отправить" показываем только если мы НЕ сканируем и есть данные
+        // Only show Send if NOT scanning AND list is not empty
         if (!scanning && currentSession.length > 0) {
-            document.getElementById('sendBtn').style.display = 'block';
+            sendBtn.style.display = 'block';
         } else {
-            document.getElementById('sendBtn').style.display = 'none';
+            sendBtn.style.display = 'none';
         }
     }
 </script>
