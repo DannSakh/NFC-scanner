@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NFC Scanner</title>
+    <title>NFC Attendance Scanner</title>
     <style>
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
@@ -19,15 +19,7 @@
             max-width: 400px; 
             margin: 0 auto; 
         }
-        
-        h2 { 
-            text-align: center; 
-            margin-top: 0; 
-            font-weight: 700; 
-            color: #1c1c1e;
-        }
-        
-        /* Status Bar */
+        h2 { text-align: center; margin-top: 0; font-weight: 700; color: #1c1c1e; }
         #status { 
             text-align: center; 
             margin-bottom: 20px; 
@@ -35,8 +27,6 @@
             color: #8e8e93; 
             font-size: 14px;
         }
-
-        /* Buttons */
         button { 
             width: 100%; 
             padding: 18px; 
@@ -49,12 +39,10 @@
             transition: transform 0.1s;
         }
         button:active { transform: scale(0.98); }
+        .btn-start { background-color: #34c759; color: white; }
+        .btn-stop { background-color: #ff3b30; color: white; display: none; }
+        .btn-send { background-color: #007bff; color: white; display: none; margin-top: 10px; }
         
-        .btn-start { background-color: #34c759; color: white; } /* iOS Green */
-        .btn-stop { background-color: #ff3b30; color: white; display: none; } /* iOS Red */
-        .btn-send { background-color: #007bff; color: white; display: none; margin-top: 10px; } /* iOS Blue */
-        
-        /* List */
         #log { 
             margin-top: 10px; 
             max-height: 350px; 
@@ -65,12 +53,13 @@
             padding: 12px 5px; 
             border-bottom: 1px solid #e5e5ea; 
             display: flex; 
-            justify-content: space-between; 
+            align-items: center;
             font-size: 15px; 
             font-variant-numeric: tabular-nums;
         }
-        .time-col { color: #8e8e93; font-size: 13px; }
-        .id-col { font-weight: 500; font-family: monospace; }
+        .num-col { color: #007bff; font-weight: bold; width: 30px; }
+        .time-col { color: #8e8e93; font-size: 13px; margin: 0 10px; }
+        .id-col { font-weight: 500; font-family: monospace; flex-grow: 1; text-align: right; }
     </style>
 </head>
 <body>
@@ -89,7 +78,6 @@
 
 <script>
     // --- CONFIGURATION ---
-    // ВСТАВЬ СВОЮ ССЫЛКУ НИЖЕ МЕЖДУ КАВЫЧЕК
     const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxfixVI-zTYEynjpVB2Ti8xl5Fvq17H3t1Feyn3LJ7eeKpfA_xIdipxwL09jPu5MHU/exec'; 
     // ---------------------
 
@@ -97,59 +85,65 @@
     let currentSession = []; 
     let isScanning = false;
 
-    // Helpers
-    const formatTime = d => `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-    const formatDate = d => `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getFullYear()}`;
-
     const statusEl = document.getElementById('status');
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
     const sendBtn = document.getElementById('sendBtn');
     const logEl = document.getElementById('log');
 
+    // Prevent accidental refresh
+    window.addEventListener('beforeunload', (e) => {
+        if (currentSession.length > 0) {
+            e.preventDefault();
+            e.returnValue = 'You have unsent scans! Are you sure?';
+        }
+    });
+
+    const formatTime = d => `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+    const formatDate = d => `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getFullYear()}`;
+
     // 1. START
     startBtn.addEventListener('click', async () => {
         try {
-            if (!("NDEFReader" in window)) return alert("Error: Use Chrome on Android (HTTPS required).");
+            if (!("NDEFReader" in window)) return alert("Error: NFC not supported or use Chrome on Android.");
             
             ndef = new NDEFReader();
             await ndef.scan();
             
             isScanning = true;
             toggleUI(true);
-            statusEl.innerText = "📡 Scanning... Tap badges on back of phone.";
+            statusEl.innerText = "📡 Scanning... Tap badges on phone back.";
             statusEl.style.color = "#34c759";
 
             ndef.onreading = event => {
                 const id = event.serialNumber;
                 const now = new Date();
                 
-                // Duplicate prevention (2 seconds)
-                if (currentSession.length > 0) {
-                    const last = currentSession[currentSession.length - 1];
-                    if (last.id === id && (now - last.rawObj) < 2000) return;
+                // --- DUPLICATE CHECK ---
+                if (currentSession.some(r => r.id === id)) {
+                    if (navigator.vibrate) navigator.vibrate([40, 40, 40]); // Triple buzz for duplicate
+                    return; 
                 }
 
                 const rec = { 
                     date: formatDate(now), 
                     time: formatTime(now), 
-                    id: id, 
-                    rawObj: now 
+                    id: id
                 };
                 
                 currentSession.push(rec);
-                renderRow(rec);
+                renderRow(rec, currentSession.length);
                 if (navigator.vibrate) navigator.vibrate(50);
             };
 
-        } catch (err) { alert("Start Error: " + err); }
+        } catch (err) { alert("Scan Error: " + err); }
     });
 
     // 2. STOP
     stopBtn.addEventListener('click', () => {
         isScanning = false;
         toggleUI(false);
-        statusEl.innerText = `Session Paused. Count: ${currentSession.length}`;
+        statusEl.innerText = `Paused. Total: ${currentSession.length}`;
         statusEl.style.color = "#1c1c1e";
     });
 
@@ -165,16 +159,12 @@
             mode: 'no-cors',
             body: JSON.stringify({ scans: currentSession })
         }).then(() => {
-            alert("✅ Sent successfully!");
-            
-            // Reset for next group
+            alert("✅ Report sent successfully!");
             currentSession = [];
             logEl.innerHTML = "";
             sendBtn.innerText = "✉ Send Report";
             sendBtn.disabled = false;
             statusEl.innerText = "Ready for next group";
-            
-            // Hide send button until we scan new people
             sendBtn.style.display = 'none';
         }).catch(err => {
             alert("Network Error: " + err);
@@ -183,25 +173,23 @@
         });
     });
 
-    function renderRow(rec) {
+    function renderRow(rec, count) {
         const div = document.createElement('div');
         div.className = 'row';
-        div.innerHTML = `<span class="time-col">${rec.time}</span> <span class="id-col">${rec.id}</span>`;
+        // Visual numbering: count. No changes to 'rec' data.
+        div.innerHTML = `
+            <span class="num-col">#${count}</span>
+            <span class="time-col">${rec.time}</span> 
+            <span class="id-col">${rec.id}</span>
+        `;
         logEl.prepend(div);
     }
 
     function toggleUI(scanning) {
         startBtn.style.display = scanning ? 'none' : 'block';
         stopBtn.style.display = scanning ? 'block' : 'none';
-        
-        // Only show Send if NOT scanning AND list is not empty
-        if (!scanning && currentSession.length > 0) {
-            sendBtn.style.display = 'block';
-        } else {
-            sendBtn.style.display = 'none';
-        }
+        sendBtn.style.display = (!scanning && currentSession.length > 0) ? 'block' : 'none';
     }
 </script>
-
 </body>
 </html>
