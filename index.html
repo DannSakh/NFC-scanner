@@ -21,7 +21,6 @@
         }
         h2 { text-align: center; margin-top: 0; font-weight: 700; }
         
-        /* Training Selection Style */
         .input-group { margin-bottom: 20px; }
         label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #8e8e93; text-transform: uppercase; }
         select { 
@@ -31,7 +30,7 @@
             border: 1px solid #d1d1d6; 
             font-size: 16px; 
             background-color: #f2f2f7;
-            appearance: none;
+            color: #1c1c1e;
         }
 
         button { 
@@ -43,7 +42,14 @@
             border-radius: 14px; 
             cursor: pointer; 
             font-weight: 600; 
-            transition: transform 0.1s;
+            transition: all 0.2s;
+        }
+        /* Style for locked button */
+        button:disabled {
+            background-color: #d1d1d6 !important;
+            color: #8e8e93 !important;
+            cursor: not-allowed;
+            transform: none !important;
         }
         button:active { transform: scale(0.98); }
         .btn-start { background-color: #34c759; color: white; }
@@ -63,7 +69,6 @@
             border-bottom: 1px solid #e5e5ea; 
             display: flex; 
             align-items: center;
-            font-size: 15px; 
         }
         .num-col { color: #007bff; font-weight: bold; width: 35px; }
         .time-col { color: #8e8e93; font-size: 13px; margin: 0 10px; }
@@ -78,13 +83,14 @@
     <div class="input-group">
         <label>Select Training</label>
         <select id="trainingSelect">
+            <option value="" disabled selected>-- Choose training --</option>
             <option value="Safety Refresher">Safety Refresher</option>
-            </select>
+        </select>
     </div>
 
-    <div id="status">Ready to start</div>
+    <div id="status">Please select training to start</div>
 
-    <button id="startBtn" class="btn-start">▶ Start Scanning</button>
+    <button id="startBtn" class="btn-start" disabled>▶ Start Scanning</button>
     <button id="stopBtn" class="btn-stop">⏹ Stop & Review</button>
     
     <div id="log"></div>
@@ -93,7 +99,6 @@
 </div>
 
 <script>
-    // URL твоего скрипта Google Apps Script
     const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxfixVI-zTYEynjpVB2Ti8xl5Fvq17H3t1Feyn3LJ7eeKpfA_xIdipxwL09jPu5MHU/exec'; 
 
     let currentSession = []; 
@@ -106,18 +111,19 @@
     const sendBtn = document.getElementById('sendBtn');
     const logEl = document.getElementById('log');
 
-    // Защита от случайного закрытия/обновления
-    window.onbeforeunload = (e) => {
-        if (currentSession.length > 0) {
-            return "You have unsent scans! Are you sure you want to leave?";
+    // Unlock button when training is selected
+    trainingSelect.onchange = () => {
+        if (trainingSelect.value !== "") {
+            startBtn.disabled = false;
+            statusEl.innerText = "Ready to scan";
+            statusEl.style.color = "#1c1c1e";
         }
     };
 
-    // 1. START SCANNING
+    window.onbeforeunload = () => (currentSession.length > 0) ? "You have unsent scans!" : null;
+
     startBtn.onclick = async () => {
         try {
-            if (!("NDEFReader" in window)) return alert("NFC not supported. Please use Chrome on Android.");
-            
             ndef = new NDEFReader();
             await ndef.scan();
             
@@ -125,33 +131,28 @@
             stopBtn.style.display = 'block';
             sendBtn.style.display = 'none';
             trainingSelect.disabled = true;
-            statusEl.innerText = "📡 Scanning... Tap badges now";
+            statusEl.innerText = "📡 Scanning... Tap badges";
             statusEl.style.color = "#34c759";
 
             ndef.onreading = event => {
                 const id = event.serialNumber;
-                
-                // Проверка на дубликаты в рамках сессии
                 if (currentSession.some(r => r.id === id)) {
                     if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
                     return; 
                 }
-
                 const now = new Date();
                 const rec = { 
                     date: now.toLocaleDateString('ru-RU'), 
                     time: now.toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'}), 
                     id: id
                 };
-                
                 currentSession.push(rec);
                 renderRow(rec, currentSession.length);
                 if (navigator.vibrate) navigator.vibrate(50);
             };
-        } catch (err) { alert("Error: " + err); }
+        } catch (err) { alert("NFC Error: " + err); }
     };
 
-    // 2. STOP & REVIEW
     stopBtn.onclick = () => {
         startBtn.style.display = 'block';
         stopBtn.style.display = 'none';
@@ -161,20 +162,13 @@
         statusEl.style.color = "#1c1c1e";
     };
 
-    // 3. SEND REPORT
     sendBtn.onclick = () => {
         sendBtn.innerText = "⏳ Sending...";
         sendBtn.disabled = true;
-
-        const payload = {
-            training: trainingSelect.value,
-            scans: currentSession
-        };
-
         fetch(SCRIPT_URL, {
             method: 'POST',
             mode: 'no-cors',
-            body: JSON.stringify(payload)
+            body: JSON.stringify({ training: trainingSelect.value, scans: currentSession })
         }).then(() => {
             alert("✅ Report sent!");
             currentSession = [];
@@ -183,21 +177,13 @@
             sendBtn.disabled = false;
             sendBtn.innerText = "✉ Send Report";
             statusEl.innerText = "Ready to start";
-        }).catch(err => {
-            alert("Error sending: " + err);
-            sendBtn.disabled = false;
-            sendBtn.innerText = "✉ Retry Send";
         });
     };
 
     function renderRow(rec, count) {
         const div = document.createElement('div');
         div.className = 'row';
-        div.innerHTML = `
-            <span class="num-col">#${count}</span>
-            <span class="time-col">${rec.time}</span> 
-            <span class="id-col">${rec.id}</span>
-        `;
+        div.innerHTML = `<span class="num-col">#${count}</span><span class="time-col">${rec.time}</span><span class="id-col">${rec.id}</span>`;
         logEl.prepend(div);
     }
 </script>
