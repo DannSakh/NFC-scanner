@@ -19,14 +19,21 @@
             max-width: 400px; 
             margin: 0 auto; 
         }
-        h2 { text-align: center; margin-top: 0; font-weight: 700; color: #1c1c1e; }
-        #status { 
-            text-align: center; 
-            margin-bottom: 20px; 
-            font-weight: 600; 
-            color: #8e8e93; 
-            font-size: 14px;
+        h2 { text-align: center; margin-top: 0; font-weight: 700; }
+        
+        /* Training Selection Style */
+        .input-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #8e8e93; text-transform: uppercase; }
+        select { 
+            width: 100%; 
+            padding: 14px; 
+            border-radius: 12px; 
+            border: 1px solid #d1d1d6; 
+            font-size: 16px; 
+            background-color: #f2f2f7;
+            appearance: none;
         }
+
         button { 
             width: 100%; 
             padding: 18px; 
@@ -43,6 +50,8 @@
         .btn-stop { background-color: #ff3b30; color: white; display: none; }
         .btn-send { background-color: #007bff; color: white; display: none; margin-top: 10px; }
         
+        #status { text-align: center; margin-bottom: 15px; font-size: 14px; font-weight: 500; }
+        
         #log { 
             margin-top: 10px; 
             max-height: 350px; 
@@ -55,9 +64,8 @@
             display: flex; 
             align-items: center;
             font-size: 15px; 
-            font-variant-numeric: tabular-nums;
         }
-        .num-col { color: #007bff; font-weight: bold; width: 30px; }
+        .num-col { color: #007bff; font-weight: bold; width: 35px; }
         .time-col { color: #8e8e93; font-size: 13px; margin: 0 10px; }
         .id-col { font-weight: 500; font-family: monospace; flex-grow: 1; text-align: right; }
     </style>
@@ -65,7 +73,15 @@
 <body>
 
 <div class="container">
-    <h2>Attendance Scan</h2>
+    <h2>NFC Scanner</h2>
+    
+    <div class="input-group">
+        <label>Select Training</label>
+        <select id="trainingSelect">
+            <option value="Safety Refresher">Safety Refresher</option>
+            </select>
+    </div>
+
     <div id="status">Ready to start</div>
 
     <button id="startBtn" class="btn-start">▶ Start Scanning</button>
@@ -77,57 +93,54 @@
 </div>
 
 <script>
-    // --- CONFIGURATION ---
+    // URL твоего скрипта Google Apps Script
     const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxfixVI-zTYEynjpVB2Ti8xl5Fvq17H3t1Feyn3LJ7eeKpfA_xIdipxwL09jPu5MHU/exec'; 
-    // ---------------------
 
-    let ndef;
     let currentSession = []; 
-    let isScanning = false;
+    let ndef;
 
+    const trainingSelect = document.getElementById('trainingSelect');
     const statusEl = document.getElementById('status');
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
     const sendBtn = document.getElementById('sendBtn');
     const logEl = document.getElementById('log');
 
-    // Prevent accidental refresh
-    window.addEventListener('beforeunload', (e) => {
+    // Защита от случайного закрытия/обновления
+    window.onbeforeunload = (e) => {
         if (currentSession.length > 0) {
-            e.preventDefault();
-            e.returnValue = 'You have unsent scans! Are you sure?';
+            return "You have unsent scans! Are you sure you want to leave?";
         }
-    });
+    };
 
-    const formatTime = d => `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-    const formatDate = d => `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getFullYear()}`;
-
-    // 1. START
-    startBtn.addEventListener('click', async () => {
+    // 1. START SCANNING
+    startBtn.onclick = async () => {
         try {
-            if (!("NDEFReader" in window)) return alert("Error: NFC not supported or use Chrome on Android.");
+            if (!("NDEFReader" in window)) return alert("NFC not supported. Please use Chrome on Android.");
             
             ndef = new NDEFReader();
             await ndef.scan();
             
-            isScanning = true;
-            toggleUI(true);
-            statusEl.innerText = "📡 Scanning... Tap badges on phone back.";
+            startBtn.style.display = 'none';
+            stopBtn.style.display = 'block';
+            sendBtn.style.display = 'none';
+            trainingSelect.disabled = true;
+            statusEl.innerText = "📡 Scanning... Tap badges now";
             statusEl.style.color = "#34c759";
 
             ndef.onreading = event => {
                 const id = event.serialNumber;
-                const now = new Date();
                 
-                // --- DUPLICATE CHECK ---
+                // Проверка на дубликаты в рамках сессии
                 if (currentSession.some(r => r.id === id)) {
-                    if (navigator.vibrate) navigator.vibrate([40, 40, 40]); // Triple buzz for duplicate
+                    if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
                     return; 
                 }
 
+                const now = new Date();
                 const rec = { 
-                    date: formatDate(now), 
-                    time: formatTime(now), 
+                    date: now.toLocaleDateString('ru-RU'), 
+                    time: now.toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'}), 
                     id: id
                 };
                 
@@ -135,60 +148,57 @@
                 renderRow(rec, currentSession.length);
                 if (navigator.vibrate) navigator.vibrate(50);
             };
+        } catch (err) { alert("Error: " + err); }
+    };
 
-        } catch (err) { alert("Scan Error: " + err); }
-    });
-
-    // 2. STOP
-    stopBtn.addEventListener('click', () => {
-        isScanning = false;
-        toggleUI(false);
+    // 2. STOP & REVIEW
+    stopBtn.onclick = () => {
+        startBtn.style.display = 'block';
+        stopBtn.style.display = 'none';
+        if (currentSession.length > 0) sendBtn.style.display = 'block';
+        trainingSelect.disabled = false;
         statusEl.innerText = `Paused. Total: ${currentSession.length}`;
         statusEl.style.color = "#1c1c1e";
-    });
+    };
 
-    // 3. SEND
-    sendBtn.addEventListener('click', () => {
-        if (currentSession.length === 0) return alert("List is empty!");
-
+    // 3. SEND REPORT
+    sendBtn.onclick = () => {
         sendBtn.innerText = "⏳ Sending...";
         sendBtn.disabled = true;
+
+        const payload = {
+            training: trainingSelect.value,
+            scans: currentSession
+        };
 
         fetch(SCRIPT_URL, {
             method: 'POST',
             mode: 'no-cors',
-            body: JSON.stringify({ scans: currentSession })
+            body: JSON.stringify(payload)
         }).then(() => {
-            alert("✅ Report sent successfully!");
+            alert("✅ Report sent!");
             currentSession = [];
             logEl.innerHTML = "";
-            sendBtn.innerText = "✉ Send Report";
-            sendBtn.disabled = false;
-            statusEl.innerText = "Ready for next group";
             sendBtn.style.display = 'none';
+            sendBtn.disabled = false;
+            sendBtn.innerText = "✉ Send Report";
+            statusEl.innerText = "Ready to start";
         }).catch(err => {
-            alert("Network Error: " + err);
+            alert("Error sending: " + err);
             sendBtn.disabled = false;
             sendBtn.innerText = "✉ Retry Send";
         });
-    });
+    };
 
     function renderRow(rec, count) {
         const div = document.createElement('div');
         div.className = 'row';
-        // Visual numbering: count. No changes to 'rec' data.
         div.innerHTML = `
             <span class="num-col">#${count}</span>
             <span class="time-col">${rec.time}</span> 
             <span class="id-col">${rec.id}</span>
         `;
         logEl.prepend(div);
-    }
-
-    function toggleUI(scanning) {
-        startBtn.style.display = scanning ? 'none' : 'block';
-        stopBtn.style.display = scanning ? 'block' : 'none';
-        sendBtn.style.display = (!scanning && currentSession.length > 0) ? 'block' : 'none';
     }
 </script>
 </body>
