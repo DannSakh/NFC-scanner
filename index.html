@@ -31,6 +31,7 @@
             font-size: 16px; 
             background-color: #f2f2f7;
             color: #1c1c1e;
+            appearance: none;
         }
 
         button { 
@@ -44,7 +45,6 @@
             font-weight: 600; 
             transition: all 0.2s;
         }
-        /* Style for locked button */
         button:disabled {
             background-color: #d1d1d6 !important;
             color: #8e8e93 !important;
@@ -85,6 +85,7 @@
         <select id="trainingSelect">
             <option value="" disabled selected>-- Choose training --</option>
             <option value="Safety Refresher">Safety Refresher</option>
+            <option value="Ad Hoc training">Ad Hoc training</option>
         </select>
     </div>
 
@@ -111,7 +112,7 @@
     const sendBtn = document.getElementById('sendBtn');
     const logEl = document.getElementById('log');
 
-    // Unlock button when training is selected
+    // Unlock logic
     trainingSelect.onchange = () => {
         if (trainingSelect.value !== "") {
             startBtn.disabled = false;
@@ -124,6 +125,7 @@
 
     startBtn.onclick = async () => {
         try {
+            if (!("NDEFReader" in window)) return alert("NFC not supported. Use Chrome on Android.");
             ndef = new NDEFReader();
             await ndef.scan();
             
@@ -165,10 +167,14 @@
     sendBtn.onclick = () => {
         sendBtn.innerText = "⏳ Sending...";
         sendBtn.disabled = true;
+        
         fetch(SCRIPT_URL, {
             method: 'POST',
             mode: 'no-cors',
-            body: JSON.stringify({ training: trainingSelect.value, scans: currentSession })
+            body: JSON.stringify({ 
+                training: trainingSelect.value, 
+                scans: currentSession 
+            })
         }).then(() => {
             alert("✅ Report sent!");
             currentSession = [];
